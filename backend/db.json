@@ -1,0 +1,26 @@
+{
+  "users": [],
+  "products": [
+    {
+      "product_id": 1757930207635,
+      "product_name": "My Newest Product",
+      "price": "250.00",
+      "image_url": "https://getto-image-bucket-qa.s3.ap-south-1.amazonaws.com/products/1757930207635.png",
+      "added_at": "2025-09-15T09:56:47.635Z"
+    },
+    {
+      "product_id": 1757930930903,
+      "product_name": "Formal Shirt",
+      "price": "500.00",
+      "image_url": null,
+      "added_at": "2025-09-15T10:08:50.903Z"
+    },
+    {
+      "product_id": 1757942986845,
+      "product_name": "My Fresh Product",
+      "price": "300.00",
+      "image_url": "https://getto-image-bucket-qa.s3.ap-south-1.amazonaws.com/products/1757942986845.png",
+      "added_at": "2025-09-15T13:29:46.845Z"
+    }
+  ]
+}
