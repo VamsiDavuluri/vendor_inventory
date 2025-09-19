@@ -1,22 +1,24 @@
 import 'package:flutter/material.dart';
-import 'screens/home_screen.dart';
+import 'screens/qr_scanner_screen.dart'; // This import is now correct
 
 void main() {
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      debugShowCheckedModeBanner: false,
       title: 'Vendor Inventory',
       theme: ThemeData(
-        primarySwatch: Colors.deepPurple,
+        primaryColor: Color(0xFF009EAE),
+        scaffoldBackgroundColor: Colors.white,
       ),
-      home: HomeScreen(),
+      debugShowCheckedModeBanner: false,
+      // This home property is now correct
+      home: QRScannerScreen(),
     );
   }
 }

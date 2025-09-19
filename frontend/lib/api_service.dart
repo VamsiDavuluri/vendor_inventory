@@ -1,73 +1,79 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'screens/home_screen.dart'; // Import the Product class
 
 class ApiService {
-  static const String baseUrl =
-      "http://192.168.0.121:3000"; // 🔥 your backend IP
+  static const String baseUrl = "http://192.168.0.121:3000"; // Your IP
 
-  /// Upload multiple images
+  /// NEW METHOD: Fetches the list of products for a specific vendor.
+  static Future<List<Product>> fetchProductsForVendor(String vendorId) async {
+    final uri = Uri.parse("$baseUrl/products/$vendorId");
+    print("➡️ Fetching product list for vendor: $vendorId");
+    final response = await http.get(uri);
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      if (data.isEmpty) {
+        throw Exception("Vendor not found or has no products.");
+      }
+      final products = data.map((json) {
+        return Product(id: json['id'], name: json['name'], hasImages: false);
+      }).toList();
+      print("⬅️ Found ${products.length} products.");
+      return products;
+    } else {
+      throw Exception("Failed to fetch products for vendor $vendorId");
+    }
+  }
+
+  // --- Your other methods remain the same ---
+
+  static Future<List<String>> fetchProductImages(
+    String vendorId,
+    String productId,
+  ) async {
+    final uri = Uri.parse("$baseUrl/products/$vendorId/$productId");
+    final response = await http.get(uri);
+    if (response.statusCode == 200) {
+      return List<String>.from(jsonDecode(response.body)['images']);
+    } else {
+      throw Exception("Failed to fetch product images");
+    }
+  }
+
   static Future<Map<String, dynamic>> uploadMultipleImages(
     String vendorId,
     String productId,
     String productName,
     List<File> images,
   ) async {
-    var request = http.MultipartRequest(
-      "POST",
-      Uri.parse("$baseUrl/upload/$vendorId/$productId/$productName"),
-    );
-
-    for (var img in images) {
-      request.files.add(await http.MultipartFile.fromPath("files", img.path));
+    final uri = Uri.parse("$baseUrl/upload/$vendorId/$productId/$productName");
+    var request = http.MultipartRequest("POST", uri);
+    for (var imageFile in images) {
+      request.files.add(
+        await http.MultipartFile.fromPath("files", imageFile.path),
+      );
     }
-
     var response = await request.send();
     if (response.statusCode == 200) {
-      final respStr = await response.stream.bytesToString();
-      final data = jsonDecode(respStr);
-      print("⬅️ Upload response: $data");
-      return data;
+      return jsonDecode(await response.stream.bytesToString());
     } else {
-      throw Exception("Failed to upload images: ${response.statusCode}");
+      throw Exception("Failed to upload images");
     }
   }
 
-  /// Fetch product images (returns signed URLs)
-  static Future<List<String>> fetchProductImages(
-    String vendorId,
-    String productId,
-  ) async {
-    final response = await http.get(
-      Uri.parse("$baseUrl/products/$vendorId/$productId"),
-    );
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      final images = List<String>.from(data['images']);
-      print("⬅️ Fetch response: ${images.length} images");
-      return images;
-    } else {
-      throw Exception("Failed to fetch product images");
-    }
-  }
-
-  /// Delete image
   static Future<List<String>> deleteImage(
     String vendorId,
     String productId,
     String imageKey,
   ) async {
-    final response = await http.delete(
-      Uri.parse("$baseUrl/products/$vendorId/$productId/$imageKey"),
-    );
-
+    final uri = Uri.parse("$baseUrl/products/$vendorId/$productId/$imageKey");
+    final response = await http.delete(uri);
     if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      final images = List<String>.from(data['images']);
-      print("⬅️ Delete response: ${images.length} images left");
-      return images;
+      return List<String>.from(jsonDecode(response.body)['images']);
     } else {
-      throw Exception("Failed to delete image: ${response.statusCode}");
+      throw Exception("Failed to delete image");
     }
   }
 }

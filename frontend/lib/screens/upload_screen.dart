@@ -5,11 +5,13 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../api_service.dart';
 
 class UploadScreen extends StatefulWidget {
+  final String vendorId;
   final String productId;
   final String productName;
 
   const UploadScreen({
     Key? key,
+    required this.vendorId,
     required this.productId,
     required this.productName,
   }) : super(key: key);
@@ -34,7 +36,7 @@ class _UploadScreenState extends State<UploadScreen> {
   Future<void> _fetchPreviousImages() async {
     try {
       final urls = await ApiService.fetchProductImages(
-        "vendor_123",
+        widget.vendorId,
         widget.productId,
       );
       if (mounted) setState(() => _previousImages = urls);
@@ -59,7 +61,7 @@ class _UploadScreenState extends State<UploadScreen> {
     setState(() => _isLoading = true);
     try {
       final result = await ApiService.uploadMultipleImages(
-        "vendor_123",
+        widget.vendorId,
         widget.productId,
         widget.productName,
         _images,
@@ -92,7 +94,7 @@ class _UploadScreenState extends State<UploadScreen> {
     final imageKey = Uri.decodeFull(imageUrl.split('/').last.split('?').first);
     try {
       final updatedImages = await ApiService.deleteImage(
-        "vendor_123",
+        widget.vendorId,
         widget.productId,
         imageKey,
       );

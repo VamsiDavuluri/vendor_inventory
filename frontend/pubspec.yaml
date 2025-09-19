@@ -42,6 +42,8 @@ dependencies:
   flutter_image_compress: ^2.3.0 # <-- ADD THIS LINE
   path_provider: ^2.0.11 # Or check pub.dev for the latest version
   cached_network_image: ^3.2.3
+  mobile_scanner: ^3.5.1   # For QR code scanning
+  permission_handler: ^11.0.1 
 
 
 
