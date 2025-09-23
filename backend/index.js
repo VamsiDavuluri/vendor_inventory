@@ -12,9 +12,14 @@ const qrcode = require('qrcode');
 const app = express();
 const port = 3000;
 app.use(cors());
+app.use(express.json());
 
-// --- AWS and Multer setup ---
-const s3 = new AWS.S3({ /* ... your config ... */ });
+// --- AWS S3 and Multer Setup ---
+const s3 = new AWS.S3({
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  region: process.env.AWS_REGION,
+});
 const bucketName = process.env.AWS_BUCKET_NAME;
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
@@ -34,35 +39,39 @@ const VENDOR_PRODUCTS = {
 // ================================================================= //
 
 /**
- * ✅ Get the list of products for a specific vendor
+ * ✅ EFFICIENT ENDPOINT
+ * Fetches the product list for a vendor AND enriches it with image status and count.
  */
-app.get('/products/:vendorId', (req, res) => {
+app.get('/vendor/:vendorId/products-with-status', async (req, res) => {
   const { vendorId } = req.params;
   const products = VENDOR_PRODUCTS[vendorId];
-  console.log(`🔎 Request for product list from vendor: ${vendorId}`);
-  if (products) {
-    console.log(`📤 Found ${products.length} products. Sending list.`);
-    res.json(products);
-  } else {
-    console.log(`🤷 Vendor ${vendorId} not found or has no products.`);
-    res.status(404).json([]);
+  if (!products) return res.status(404).json([]);
+  try {
+    const enrichedProducts = await Promise.all(
+      products.map(async (product) => {
+        const result = await db.query('SELECT image_url FROM vendor_products WHERE vendor_id=$1 AND product_id=$2 ORDER BY created_at DESC', [vendorId, product.id]);
+        const hasImages = result.rows.length > 0;
+        const coverImageUrl = hasImages ? s3.getSignedUrl('getObject', { Bucket: bucketName, Key: result.rows[0].image_url, Expires: 3600 }) : null;
+        return {
+          id: product.id, name: product.name, hasImages: hasImages, coverImageUrl: coverImageUrl, imageCount: result.rows.length,
+        };
+      })
+    );
+    res.json(enrichedProducts);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch product statuses' });
   }
 });
 
 /**
- * ✅ Fetch a single product's images
+ * ✅ Fetch a single product's images (Thumbnail First)
  */
 app.get('/products/:vendorId/:productId', async (req, res) => {
   const { vendorId, productId } = req.params;
   try {
-    // THIS IS THE LOG YOU WERE MISSING
     console.log("🔎 Fetching images with:", { vendorId, productId });
-
-    const result = await db.query('SELECT image_url FROM vendor_products WHERE vendor_id=$1 AND product_id=$2', [vendorId, productId]);
-    
-    // THIS IS THE LOG YOU WERE MISSING
+    const result = await db.query('SELECT image_url, created_at FROM vendor_products WHERE vendor_id=$1 AND product_id=$2 ORDER BY created_at DESC', [vendorId, productId]);
     console.log("📤 DB rows on fetch:", result.rows);
-
     const freshUrls = result.rows.map(row => s3.getSignedUrl('getObject', { Bucket: bucketName, Key: row.image_url, Expires: 3600 }));
     res.json({ images: freshUrls });
   } catch (err) {
@@ -72,32 +81,45 @@ app.get('/products/:vendorId/:productId', async (req, res) => {
 });
 
 /**
- * ✅ Upload images
+ * ✅ Set a product's thumbnail image by updating its timestamp
  */
-app.post('/upload/:vendorId/:productId/:productName', upload.array('files'), async (req, res) => {
-  const { vendorId, productId, productName } = req.params;
+app.post('/products/:vendorId/:productId/thumbnail', async (req, res) => {
+  const { vendorId, productId } = req.params;
+  const { imageKey } = req.body;
+  const fullS3Key = `${vendorId}/${productId}/${imageKey}`;
+  try {
+    const result = await db.query("UPDATE vendor_products SET created_at = NOW() WHERE image_url = $1 RETURNING *", [fullS3Key]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Image key not found' });
+    res.status(200).json({ message: 'Thumbnail updated successfully' });
+  } catch (err) { res.status(500).json({ error: 'Failed to set thumbnail' }); }
+});
+
+/**
+ * ✅ Endpoint for adding images.
+ */
+app.post('/products/:vendorId/:productId/add-images', upload.array('files'), async (req, res) => {
+  const { vendorId, productId } = req.params;
   if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No files uploaded' });
-
-  console.log(`📥 Uploading ${req.files.length} files for product ${productId}...`);
-
-  for (const file of req.files) {
-    try {
-      const webpBuffer = await sharp(file.buffer).webp({ quality: 80 }).toBuffer();
+  const allVendorProducts = VENDOR_PRODUCTS[vendorId] || [];
+  const productInfo = allVendorProducts.find(p => p.id === productId);
+  const productName = productInfo ? productInfo.name : 'Unknown Product';
+  try {
+    const uploadPromises = req.files.map(async (file) => {
+      console.log(`   🔄 Converting ${file.originalname} to WebP for product ${productId}...`);
+      const webpBuffer = await sharp(file.buffer).rotate().webp({ quality: 80 }).toBuffer();
       const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}.webp`;
       const s3Key = `${vendorId}/${productId}/${uniqueName}`;
       await s3.upload({ Bucket: bucketName, Key: s3Key, Body: webpBuffer, ContentType: 'image/webp' }).promise();
-      await db.query('INSERT INTO vendor_products(vendor_id, product_id, product_name, image_url) VALUES($1,$2,$3,$4)', [vendorId, productId, productName, s3Key]);
-      console.log(`   ✅ Uploaded ${file.originalname} → ${uniqueName}`);
-    } catch (err) {
-      console.error("   ❌ Upload error:", err);
-      return res.status(500).json({ error: 'Upload failed' });
-    }
+      await db.query('INSERT INTO vendor_products(vendor_id, product_id, product_name, image_url) VALUES($1, $2, $3, $4)', [vendorId, productId, productName, s3Key]);
+    });
+    await Promise.all(uploadPromises);
+    const result = await db.query('SELECT image_url FROM vendor_products WHERE vendor_id=$1 AND product_id=$2 ORDER BY created_at DESC', [vendorId, productId]);
+    const freshUrls = result.rows.map(row => s3.getSignedUrl('getObject', { Bucket: bucketName, Key: row.image_url, Expires: 3600 }));
+    res.json({ images: freshUrls });
+  } catch (err) {
+    console.error("❌ Upload error:", err);
+    return res.status(500).json({ error: 'Upload failed' });
   }
-
-  console.log(`   🔄 Fetching updated image list after upload...`);
-  const result = await db.query('SELECT image_url FROM vendor_products WHERE vendor_id=$1 AND product_id=$2', [vendorId, productId]);
-  const freshUrls = result.rows.map(row => s3.getSignedUrl('getObject', { Bucket: bucketName, Key: row.image_url, Expires: 3600 }));
-  res.json({ images: freshUrls });
 });
 
 /**
@@ -106,19 +128,13 @@ app.post('/upload/:vendorId/:productId/:productName', upload.array('files'), asy
 app.delete('/products/:vendorId/:productId/:imageKey', async (req, res) => {
   const { vendorId, productId, imageKey } = req.params;
   const fullKey = `${vendorId}/${productId}/${imageKey}`;
-  console.log(`🗑️ Deleting key: ${fullKey}`);
   try {
     await s3.deleteObject({ Bucket: bucketName, Key: fullKey }).promise();
-    await db.query('DELETE FROM vendor_products WHERE vendor_id=$1 AND product_id=$2 AND image_url=$3', [vendorId, productId, fullKey]);
-    
-    console.log(`   🔄 Fetching updated image list after delete...`);
-    const result = await db.query('SELECT image_url FROM vendor_products WHERE vendor_id=$1 AND product_id=$2', [vendorId, productId]);
+    await db.query('DELETE FROM vendor_products WHERE image_url=$1', [fullKey]);
+    const result = await db.query('SELECT image_url FROM vendor_products WHERE vendor_id=$1 AND product_id=$2 ORDER BY created_at DESC', [vendorId, productId]);
     const freshUrls = result.rows.map(row => s3.getSignedUrl('getObject', { Bucket: bucketName, Key: row.image_url, Expires: 3600 }));
     res.json({ images: freshUrls });
-  } catch (err) {
-    console.error("   ❌ Delete error:", err);
-    res.status(500).json({ error: "Failed to delete image" });
-  }
+  } catch (err) { res.status(500).json({ error: "Failed to delete image" }); }
 });
 
 /**
@@ -130,13 +146,8 @@ app.get('/vendor/:vendorId/qrcode', async (req, res) => {
   try {
     const qrCodeDataURL = await qrcode.toDataURL(vendorId);
     res.json({ qrCodeUrl: qrCodeDataURL });
-    console.log(`✅ Generated QR Code for: ${vendorId}`);
-  } catch (err) {
-    console.error('❌ QR Code generation error:', err);
-    res.status(500).send('Failed to generate QR Code');
-  }
+  } catch (err) { res.status(500).send('Failed to generate QR Code'); }
 });
-
 
 // Start server
 app.listen(port, '0.0.0.0', () => {

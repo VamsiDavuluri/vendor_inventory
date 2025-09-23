@@ -1,20 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_vector_icons/flutter_vector_icons.dart';
 import '../api_service.dart';
 import 'upload_screen.dart';
 
-// Data model for product
 class Product {
   final String id;
   final String name;
   bool hasImages;
-  Product({required this.id, required this.name, this.hasImages = false});
+  String? coverImageUrl;
+  final int imageCount;
+  Product({
+    required this.id,
+    required this.name,
+    this.hasImages = false,
+    this.coverImageUrl,
+    this.imageCount = 0,
+  });
 }
 
 class HomeScreen extends StatefulWidget {
   final String vendorId;
-  final List<Product> initialProducts; // It receives the loaded products
-
+  final List<Product> initialProducts;
   const HomeScreen({
     Key? key,
     required this.vendorId,
@@ -35,7 +42,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // The screen receives its data directly, no need for an initial API call.
     _allProducts = widget.initialProducts;
     _filteredProducts = widget.initialProducts;
   }
@@ -46,31 +52,16 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  // This function is now ONLY for pull-to-refresh
   Future<void> _refreshProducts() async {
     try {
-      // We re-fetch the entire list and their statuses on refresh
-      List<Product> vendorProducts = await ApiService.fetchProductsForVendor(
-        widget.vendorId,
-      );
-      final List<Future<Product>> productStatusFutures = vendorProducts.map((
-        product,
-      ) async {
-        final imageUrls = await ApiService.fetchProductImages(
-          widget.vendorId,
-          product.id,
-        );
-        product.hasImages = imageUrls.isNotEmpty;
-        return product;
-      }).toList();
-      final List<Product> updatedProducts = await Future.wait(
-        productStatusFutures,
-      );
+      final List<Product> updatedProducts =
+          await ApiService.fetchProductsWithStatus(widget.vendorId);
+
+      // The print loop has been removed from here to keep the terminal clean.
 
       if (mounted) {
         setState(() {
           _allProducts = updatedProducts;
-          // Re-apply the search filter after refreshing
           _filteredProducts = _allProducts
               .where(
                 (p) =>
@@ -81,12 +72,11 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     } catch (e) {
       print("Error on refresh: $e");
-      // Optionally show a snackbar on refresh failure
     }
   }
 
   Future<void> _navigateToUploadScreen(Product product) async {
-    final bool? resultHasImages = await Navigator.push(
+    final bool? result = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => UploadScreen(
@@ -97,10 +87,8 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
 
-    if (resultHasImages != null) {
-      setState(() {
-        product.hasImages = resultHasImages;
-      });
+    if (result == true) {
+      await _refreshProducts();
     }
 
     if (mounted) {
@@ -122,97 +110,141 @@ class _HomeScreenState extends State<HomeScreen> {
         elevation: 0,
       ),
       body: Padding(
-        padding: const EdgeInsets.all(12.0),
+        padding: const EdgeInsets.symmetric(horizontal: 12.0),
         child: Column(
           children: [
-            TextField(
-              focusNode: _searchFocus,
-              decoration: InputDecoration(
-                hintText: "Search for products...",
-                prefixIcon: Icon(Icons.search),
-                contentPadding: EdgeInsets.symmetric(vertical: 10.0),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(30.0),
-                  borderSide: BorderSide(
-                    color: Colors.grey.shade300,
-                    width: 1.0,
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: TextField(
+                focusNode: _searchFocus,
+                decoration: InputDecoration(
+                  hintText: "Search for products...",
+                  prefixIcon: Icon(Icons.search),
+                  contentPadding: EdgeInsets.symmetric(vertical: 10.0),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(30.0),
+                    borderSide: BorderSide(
+                      color: Colors.grey.shade300,
+                      width: 1.0,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(30.0),
+                    borderSide: BorderSide(
+                      color: Color(0xFF009EAE),
+                      width: 1.5,
+                    ),
                   ),
                 ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(30.0),
-                  borderSide: BorderSide(color: Color(0xFF009EAE), width: 1.5),
-                ),
+                onChanged: (val) {
+                  setState(() {
+                    _searchQuery = val;
+                    _filteredProducts = _allProducts
+                        .where(
+                          (p) => p.name.toLowerCase().contains(
+                            _searchQuery.toLowerCase(),
+                          ),
+                        )
+                        .toList();
+                  });
+                },
               ),
-              onChanged: (val) {
-                setState(() {
-                  _searchQuery = val;
-                  _filteredProducts = _allProducts
-                      .where(
-                        (p) => p.name.toLowerCase().contains(
-                          _searchQuery.toLowerCase(),
-                        ),
-                      )
-                      .toList();
-                });
-              },
             ),
-            SizedBox(height: 16),
             Expanded(
-              // The initial loading indicator is no longer needed here.
               child: RefreshIndicator(
                 onRefresh: _refreshProducts,
-                child: ListView.builder(
+                child: GridView.builder(
+                  padding: const EdgeInsets.only(top: 16, bottom: 24),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                    childAspectRatio: 0.75,
+                  ),
                   itemCount: _filteredProducts.length,
                   itemBuilder: (context, index) {
                     final product = _filteredProducts[index];
-                    return Card(
-                      color: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      margin: EdgeInsets.symmetric(vertical: 6),
-                      elevation: 0.5,
-                      child: ListTile(
-                        leading: product.hasImages
-                            ? ShaderMask(
-                                blendMode: BlendMode.srcIn,
-                                shaderCallback: (bounds) =>
-                                    LinearGradient(
-                                      colors: [
-                                        Color(0xFF02D7C0),
-                                        Color(0xFF009EAE),
-                                      ],
-                                    ).createShader(
-                                      Rect.fromLTWH(
-                                        0,
-                                        0,
-                                        bounds.width,
-                                        bounds.height,
-                                      ),
-                                    ),
-                                child: Icon(
-                                  MaterialCommunityIcons.folder,
-                                  size: 28,
-                                ),
-                              )
-                            : Icon(
-                                MaterialCommunityIcons.folder_outline,
-                                color: Colors.grey,
-                                size: 28,
-                              ),
-                        title: Text(
-                          product.name,
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        trailing: Icon(Icons.arrow_forward_ios, size: 16),
-                        onTap: () => _navigateToUploadScreen(product),
-                      ),
+                    return _ProductCard(
+                      product: product,
+                      onTap: () => _navigateToUploadScreen(product),
                     );
                   },
                 ),
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProductCard extends StatelessWidget {
+  final Product product;
+  final VoidCallback onTap;
+  const _ProductCard({Key? key, required this.product, required this.onTap})
+    : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 10,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: Container(
+                  color: Colors.grey[200],
+                  child: product.hasImages && product.coverImageUrl != null
+                      ? CachedNetworkImage(
+                          imageUrl: product.coverImageUrl!,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => Center(
+                            child: Icon(
+                              MaterialCommunityIcons.folder_multiple_image,
+                              color: Colors.grey[400],
+                              size: 40,
+                            ),
+                          ),
+                          errorWidget: (context, url, error) => Icon(
+                            Icons.image_not_supported,
+                            color: Colors.grey,
+                          ),
+                        )
+                      : Center(
+                          child: Icon(
+                            MaterialCommunityIcons.folder_multiple_image,
+                            color: Colors.grey[400],
+                            size: 40,
+                          ),
+                        ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Text(
+                  product.name,
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -198,26 +198,10 @@ class _LoadingScreenState extends State<_LoadingScreen> {
 
   Future<void> _fetchDataAndNavigate() async {
     try {
-      // 1. Fetch the base product list from the backend
-      List<Product> vendorProducts = await ApiService.fetchProductsForVendor(
-        widget.vendorId,
-      );
+      final List<Product> loadedProducts =
+          await ApiService.fetchProductsWithStatus(widget.vendorId);
 
-      // 2. Check the image status for each product in the fetched list
-      final List<Future<Product>> productStatusFutures = vendorProducts.map((
-        product,
-      ) async {
-        final imageUrls = await ApiService.fetchProductImages(
-          widget.vendorId,
-          product.id,
-        );
-        product.hasImages = imageUrls.isNotEmpty;
-        return product;
-      }).toList();
-
-      final List<Product> loadedProducts = await Future.wait(
-        productStatusFutures,
-      );
+      // The print loop has been removed from here to keep the terminal clean.
 
       if (mounted) {
         Navigator.pushAndRemoveUntil(
@@ -234,7 +218,6 @@ class _LoadingScreenState extends State<_LoadingScreen> {
     } catch (e) {
       print("❌ Failed to load vendor data: $e");
       if (mounted) {
-        // Show an error dialog before popping back
         await showDialog(
           context: context,
           builder: (context) => AlertDialog(
