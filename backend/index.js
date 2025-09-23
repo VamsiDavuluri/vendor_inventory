@@ -95,27 +95,44 @@ app.post('/products/:vendorId/:productId/thumbnail', async (req, res) => {
 });
 
 /**
- * ✅ Endpoint for adding images.
+ * ✅ SMART UPLOAD ENDPOINT (Corrected)
+ * Now correctly sets timestamps to guarantee thumbnail order.
  */
 app.post('/products/:vendorId/:productId/add-images', upload.array('files'), async (req, res) => {
   const { vendorId, productId } = req.params;
+  const { thumbnail_index } = req.body; // Index of the thumbnail in the files array
+
   if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No files uploaded' });
+
   const allVendorProducts = VENDOR_PRODUCTS[vendorId] || [];
   const productInfo = allVendorProducts.find(p => p.id === productId);
   const productName = productInfo ? productInfo.name : 'Unknown Product';
+
   try {
-    const uploadPromises = req.files.map(async (file) => {
+    const uploadPromises = req.files.map(async (file, index) => {
       console.log(`   🔄 Converting ${file.originalname} to WebP for product ${productId}...`);
       const webpBuffer = await sharp(file.buffer).rotate().webp({ quality: 80 }).toBuffer();
       const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}.webp`;
       const s3Key = `${vendorId}/${productId}/${uniqueName}`;
+      
       await s3.upload({ Bucket: bucketName, Key: s3Key, Body: webpBuffer, ContentType: 'image/webp' }).promise();
-      await db.query('INSERT INTO vendor_products(vendor_id, product_id, product_name, image_url) VALUES($1, $2, $3, $4)', [vendorId, productId, productName, s3Key]);
+
+      const timestamp = (index.toString() === thumbnail_index) 
+        ? 'NOW()' 
+        : `NOW() - interval '${index + 1} seconds'`;
+
+      await db.query(
+        `INSERT INTO vendor_products(vendor_id, product_id, product_name, image_url, created_at) VALUES($1, $2, $3, $4, ${timestamp})`,
+        [vendorId, productId, productName, s3Key]
+      );
     });
+
     await Promise.all(uploadPromises);
+
     const result = await db.query('SELECT image_url FROM vendor_products WHERE vendor_id=$1 AND product_id=$2 ORDER BY created_at DESC', [vendorId, productId]);
     const freshUrls = result.rows.map(row => s3.getSignedUrl('getObject', { Bucket: bucketName, Key: row.image_url, Expires: 3600 }));
     res.json({ images: freshUrls });
+
   } catch (err) {
     console.error("❌ Upload error:", err);
     return res.status(500).json({ error: 'Upload failed' });

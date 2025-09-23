@@ -29,23 +29,15 @@ class ApiService {
     }
   }
 
-  /// Fetch a single product's images and optionally log each URL.
+  /// Fetch a single product's images (used for refreshing the UploadScreen).
   static Future<List<String>> fetchProductImages(
     String vendorId,
-    String productId, {
-    bool logUrls = false,
-  }) async {
+    String productId,
+  ) async {
     final uri = Uri.parse("$baseUrl/products/$vendorId/$productId");
     final response = await http.get(uri);
     if (response.statusCode == 200) {
-      final images = List<String>.from(jsonDecode(response.body)['images']);
-      if (logUrls) {
-        print("📥 Fetched ${images.length} images for $productId:");
-        for (var i = 0; i < images.length; i++) {
-          print("  Image $i: ${images[i]}");
-        }
-      }
-      return images;
+      return List<String>.from(jsonDecode(response.body)['images']);
     } else {
       throw Exception("Failed to fetch product images for $productId");
     }

@@ -60,49 +60,49 @@ class _UploadScreenState extends State<UploadScreen> {
     }
   }
 
-  /// REWRITTEN AND ROBUST SAVE LOGIC
   Future<void> _handleSaveChanges() async {
     setState(() => _isLoading = true);
     try {
-      // If there are new images to upload, this is the primary action.
       if (_localImages.isNotEmpty) {
-        // Find the index of the selected local thumbnail BEFORE uploading.
         int? thumbnailIndex;
         if (_localThumbnail != null) {
           thumbnailIndex = _localImages.indexOf(_localThumbnail!);
+        } else if (_networkImages.isEmpty && _localImages.isNotEmpty) {
+          thumbnailIndex = 0;
         }
-
         final result = await ApiService.addImages(
           widget.vendorId,
           widget.productId,
           _localImages,
           thumbnailIndex,
         );
-
         if (result.containsKey('images')) {
           _showTopFlashbar(
             "Images uploaded successfully",
             Colors.green,
             Icons.check_circle,
           );
-
-          // After a successful upload, always refresh the state from the server
-          // to get the final, correct order of all images.
-          await _fetchPreviousImages();
-
+          if (_newNetworkThumbnailUrl != null &&
+              _newNetworkThumbnailUrl != _originalNetworkThumbnailUrl) {
+            await _setAsNetworkThumbnail(
+              _newNetworkThumbnailUrl!,
+              showIndicator: false,
+            );
+          } else {
+            await _fetchPreviousImages();
+          }
           setState(() {
             _localImages.clear();
             _localThumbnail = null;
           });
         }
-      }
-      // If there are NO new images, but the user has selected a different NETWORK image as the thumbnail.
-      else if (_newNetworkThumbnailUrl != null &&
+      } else if (_newNetworkThumbnailUrl != null &&
           _newNetworkThumbnailUrl != _originalNetworkThumbnailUrl) {
         await _setAsNetworkThumbnail(_newNetworkThumbnailUrl!);
       }
     } catch (e) {
       _showTopFlashbar("Save failed: $e", Colors.red, Icons.error);
+      await _fetchPreviousImages();
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
