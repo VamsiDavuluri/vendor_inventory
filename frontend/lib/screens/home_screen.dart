@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_vector_icons/flutter_vector_icons.dart';
+import 'package:another_flushbar/flushbar.dart';
 import '../api_service.dart';
 import 'upload_screen.dart';
 
@@ -56,9 +57,6 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final List<Product> updatedProducts =
           await ApiService.fetchProductsWithStatus(widget.vendorId);
-
-      // The print loop has been removed from here to keep the terminal clean.
-
       if (mounted) {
         setState(() {
           _allProducts = updatedProducts;
@@ -76,7 +74,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _navigateToUploadScreen(Product product) async {
-    final bool? result = await Navigator.push(
+    final result = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => UploadScreen(
@@ -87,8 +85,13 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
 
-    if (result == true) {
+    if (result == "uploaded") {
       await _refreshProducts();
+      _showTopFlashbar(
+        "Images updated successfully",
+        Colors.green,
+        Icons.check,
+      );
     }
 
     if (mounted) {
@@ -97,12 +100,27 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _showTopFlashbar(String message, Color bgColor, IconData icon) {
+    Flushbar(
+      messageText: Text(
+        message,
+        style: const TextStyle(color: Colors.white, fontSize: 16),
+      ),
+      icon: Icon(icon, color: Colors.white),
+      backgroundColor: bgColor,
+      duration: const Duration(seconds: 2),
+      flushbarPosition: FlushbarPosition.TOP,
+      margin: const EdgeInsets.all(8),
+      borderRadius: BorderRadius.circular(8),
+    ).show(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text(
+        title: const Text(
           "Inventory",
           style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
         ),
@@ -119,8 +137,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 focusNode: _searchFocus,
                 decoration: InputDecoration(
                   hintText: "Search for products...",
-                  prefixIcon: Icon(Icons.search),
-                  contentPadding: EdgeInsets.symmetric(vertical: 10.0),
+                  prefixIcon: const Icon(Icons.search),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10.0),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(30.0),
                     borderSide: BorderSide(
@@ -128,8 +146,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       width: 1.0,
                     ),
                   ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(30.0),
+                  focusedBorder: const OutlineInputBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(30.0)),
                     borderSide: BorderSide(
                       color: Color(0xFF009EAE),
                       width: 1.5,
@@ -155,7 +173,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 onRefresh: _refreshProducts,
                 child: GridView.builder(
                   padding: const EdgeInsets.only(top: 16, bottom: 24),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
                     crossAxisSpacing: 16,
                     mainAxisSpacing: 16,
@@ -197,7 +215,7 @@ class _ProductCard extends StatelessWidget {
             BoxShadow(
               color: Colors.black.withOpacity(0.08),
               blurRadius: 10,
-              offset: Offset(0, 4),
+              offset: const Offset(0, 4),
             ),
           ],
         ),
@@ -220,7 +238,7 @@ class _ProductCard extends StatelessWidget {
                               size: 40,
                             ),
                           ),
-                          errorWidget: (context, url, error) => Icon(
+                          errorWidget: (context, url, error) => const Icon(
                             Icons.image_not_supported,
                             color: Colors.grey,
                           ),
@@ -238,7 +256,10 @@ class _ProductCard extends StatelessWidget {
                 padding: const EdgeInsets.all(12.0),
                 child: Text(
                   product.name,
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),

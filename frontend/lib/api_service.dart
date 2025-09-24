@@ -118,4 +118,13 @@ class ApiService {
       );
     }
   }
+
+  /// Update thumbnail alias (used in UploadScreen).
+  static Future<void> updateThumbnail(
+    String vendorId,
+    String productId,
+    String imageKey,
+  ) async {
+    return setThumbnail(vendorId, productId, imageKey);
+  }
 }

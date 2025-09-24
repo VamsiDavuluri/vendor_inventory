@@ -23,14 +23,16 @@ class _UploadScreenState extends State<UploadScreen> {
   List<File> _localImages = [];
   List<String> _networkImages = [];
   bool _isLoading = false;
-  String? _originalNetworkThumbnailUrl;
-  String? _newNetworkThumbnailUrl;
-  File? _localThumbnail;
 
-  bool get _hasUnsavedChanges =>
+  File? _localThumbnail;
+  String? _networkThumbnail;
+  String? _originalNetworkThumbnail; // 👈 Track the original thumb
+
+  // ✅ Button enables if new images OR thumbnail changed
+  bool get _hasChanges =>
       _localImages.isNotEmpty ||
-      (_newNetworkThumbnailUrl != null &&
-          _newNetworkThumbnailUrl != _originalNetworkThumbnailUrl);
+      _localThumbnail != null ||
+      (_networkThumbnail != _originalNetworkThumbnail);
 
   @override
   void initState() {
@@ -47,8 +49,10 @@ class _UploadScreenState extends State<UploadScreen> {
       if (mounted) {
         setState(() {
           _networkImages = urls;
-          _originalNetworkThumbnailUrl = urls.isNotEmpty ? urls.first : null;
-          _newNetworkThumbnailUrl = _originalNetworkThumbnailUrl;
+          if (urls.isNotEmpty) {
+            _networkThumbnail = urls.first; // assume 1st as default
+            _originalNetworkThumbnail = urls.first; // save original
+          }
         });
       }
     } catch (e) {
@@ -60,55 +64,67 @@ class _UploadScreenState extends State<UploadScreen> {
     }
   }
 
-  Future<void> _handleSaveChanges() async {
+  Future<void> _uploadImages() async {
+    if (!_hasChanges) {
+      _showTopFlashbar("No changes detected", Colors.orange, Icons.warning);
+      return;
+    }
+
     setState(() => _isLoading = true);
+
     try {
+      int? thumbnailIndex;
+      String? thumbnailKey;
+
+      // Local thumbnail
+      if (_localThumbnail != null) {
+        thumbnailIndex = _localImages.indexOf(_localThumbnail!);
+      }
+
+      // Network thumbnail
+      if (_networkThumbnail != null &&
+          _networkThumbnail != _originalNetworkThumbnail) {
+        final key = Uri.decodeFull(
+          _networkThumbnail!.split('/').last.split('?').first,
+        );
+        thumbnailKey = key;
+      }
+
+      // Upload new images
       if (_localImages.isNotEmpty) {
-        int? thumbnailIndex;
-        if (_localThumbnail != null) {
-          thumbnailIndex = _localImages.indexOf(_localThumbnail!);
-        } else if (_networkImages.isEmpty && _localImages.isNotEmpty) {
-          thumbnailIndex = 0;
-        }
-        final result = await ApiService.addImages(
+        await ApiService.addImages(
           widget.vendorId,
           widget.productId,
           _localImages,
           thumbnailIndex,
         );
-        if (result.containsKey('images')) {
-          _showTopFlashbar(
-            "Images uploaded successfully",
-            Colors.green,
-            Icons.check_circle,
-          );
-          if (_newNetworkThumbnailUrl != null &&
-              _newNetworkThumbnailUrl != _originalNetworkThumbnailUrl) {
-            await _setAsNetworkThumbnail(
-              _newNetworkThumbnailUrl!,
-              showIndicator: false,
-            );
-          } else {
-            await _fetchPreviousImages();
-          }
-          setState(() {
-            _localImages.clear();
-            _localThumbnail = null;
-          });
-        }
-      } else if (_newNetworkThumbnailUrl != null &&
-          _newNetworkThumbnailUrl != _originalNetworkThumbnailUrl) {
-        await _setAsNetworkThumbnail(_newNetworkThumbnailUrl!);
       }
+
+      // Update existing thumbnail
+      if (thumbnailKey != null) {
+        await ApiService.setThumbnail(
+          widget.vendorId,
+          widget.productId,
+          thumbnailKey,
+        );
+      }
+
+      if (mounted) Navigator.pop(context, "uploaded"); // ✅ Go back to Home
     } catch (e) {
       _showTopFlashbar("Save failed: $e", Colors.red, Icons.error);
-      await _fetchPreviousImages();
-    } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _deleteNetworkImage(int index) async {
+    if (_networkImages.length <= 1) {
+      _showTopFlashbar(
+        "At least 1 image must remain",
+        Colors.orange,
+        Icons.warning,
+      );
+      return;
+    }
     setState(() => _isLoading = true);
     final imageUrl = _networkImages[index];
     final imageKey = Uri.decodeFull(imageUrl.split('/').last.split('?').first);
@@ -121,17 +137,14 @@ class _UploadScreenState extends State<UploadScreen> {
       if (mounted) {
         setState(() {
           _networkImages = updatedImages;
-          _originalNetworkThumbnailUrl = updatedImages.isNotEmpty
-              ? updatedImages.first
-              : null;
-          _newNetworkThumbnailUrl = _originalNetworkThumbnailUrl;
+          if (_networkThumbnail == imageUrl) {
+            _networkThumbnail = updatedImages.isNotEmpty
+                ? updatedImages.first
+                : null;
+            _originalNetworkThumbnail = _networkThumbnail;
+          }
         });
       }
-      _showTopFlashbar(
-        "Image deleted successfully",
-        Colors.green,
-        Icons.check_circle,
-      );
     } catch (e) {
       _showTopFlashbar("Failed to delete image: $e", Colors.red, Icons.error);
     } finally {
@@ -147,37 +160,17 @@ class _UploadScreenState extends State<UploadScreen> {
     });
   }
 
-  Future<void> _setAsNetworkThumbnail(
-    String imageUrl, {
-    bool showIndicator = true,
-    bool showSuccessMessage = true,
-  }) async {
-    if (showIndicator) setState(() => _isLoading = true);
-    final imageKey = Uri.decodeFull(imageUrl.split('/').last.split('?').first);
-    try {
-      await ApiService.setThumbnail(
-        widget.vendorId,
-        widget.productId,
-        imageKey,
-      );
-      if (showSuccessMessage)
-        _showTopFlashbar(
-          "✅ Thumbnail updated successfully",
-          Colors.green,
-          Icons.check_circle,
-        );
-      await _fetchPreviousImages();
-    } catch (e) {
-      _showTopFlashbar("❌ Failed to set thumbnail", Colors.red, Icons.error);
-    } finally {
-      if (showIndicator && mounted) setState(() => _isLoading = false);
-    }
-  }
-
   void _setAsLocalThumbnail(File imageFile) {
     setState(() {
       _localThumbnail = imageFile;
-      _newNetworkThumbnailUrl = null;
+      _networkThumbnail = null; // disable network thumbnail
+    });
+  }
+
+  void _setAsNetworkThumbnail(String url) {
+    setState(() {
+      _networkThumbnail = url;
+      _localThumbnail = null; // disable local thumbnail
     });
   }
 
@@ -214,19 +207,19 @@ class _UploadScreenState extends State<UploadScreen> {
             children: [
               _UploadBox(onTap: () => _showUploadOptions(context)),
               SizedBox(height: 16),
-              if (_localImages.isNotEmpty || _networkImages.isNotEmpty)
+              if (_networkImages.isNotEmpty || _localImages.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8.0),
                   child: Text(
-                    "Tap an image to set as thumbnail",
+                    "Tap any image to set as thumbnail",
                     style: TextStyle(color: Colors.grey[600], fontSize: 14),
                   ),
                 ),
               Expanded(child: _buildImageGrid()),
               _SaveImagesButton(
                 isLoading: _isLoading,
-                hasChanges: _hasUnsavedChanges,
-                onPressed: _handleSaveChanges,
+                hasChanges: _hasChanges,
+                onPressed: _uploadImages,
               ),
             ],
           ),
@@ -248,16 +241,12 @@ class _UploadScreenState extends State<UploadScreen> {
       itemBuilder: (context, index) {
         if (index < _networkImages.length) {
           final imageUrl = _networkImages[index];
-          final isHighlighted =
-              imageUrl == _newNetworkThumbnailUrl && _localThumbnail == null;
+          final isHighlighted = imageUrl == _networkThumbnail;
           return _UploadedImageCard(
             imageUrl: imageUrl,
             isThumbnail: isHighlighted,
-            onTap: () => setState(() {
-              _localThumbnail = null;
-              _newNetworkThumbnailUrl = imageUrl;
-            }),
             onDelete: () => _deleteNetworkImage(index),
+            onTap: () => _setAsNetworkThumbnail(imageUrl),
           );
         } else {
           final localIndex = index - _networkImages.length;
@@ -284,18 +273,20 @@ class _UploadScreenState extends State<UploadScreen> {
         onGalleryPick: () async {
           Navigator.pop(context);
           final pickedFiles = await ImagePicker().pickMultiImage();
-          if (pickedFiles.isNotEmpty)
-            setState(
-              () => _localImages.addAll(pickedFiles.map((f) => File(f.path))),
-            );
+          if (pickedFiles.isNotEmpty) {
+            setState(() {
+              _localImages.addAll(pickedFiles.map((f) => File(f.path)));
+            });
+          }
         },
         onCameraPick: () async {
           Navigator.pop(context);
           final pickedFile = await ImagePicker().pickImage(
             source: ImageSource.camera,
           );
-          if (pickedFile != null)
+          if (pickedFile != null) {
             setState(() => _localImages.add(File(pickedFile.path)));
+          }
         },
       ),
     );
@@ -316,21 +307,21 @@ class _UploadScreenState extends State<UploadScreen> {
       boxShadows: [
         BoxShadow(color: Colors.black26, offset: Offset(0, 2), blurRadius: 4),
       ],
-    )..show(context);
+    ).show(context);
   }
 }
 
 class _UploadedImageCard extends StatelessWidget {
   final String imageUrl;
   final bool isThumbnail;
-  final VoidCallback onTap;
   final VoidCallback onDelete;
+  final VoidCallback onTap;
   const _UploadedImageCard({
     Key? key,
     required this.imageUrl,
     required this.isThumbnail,
-    required this.onTap,
     required this.onDelete,
+    required this.onTap,
   }) : super(key: key);
 
   @override
