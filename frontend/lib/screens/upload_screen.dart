@@ -9,7 +9,6 @@ class UploadScreen extends StatefulWidget {
   final String vendorId;
   final String productId;
   final String productName;
-
   const UploadScreen({
     Key? key,
     required this.vendorId,
@@ -70,40 +69,47 @@ class _UploadScreenState extends State<UploadScreen> {
       _showTopFlashbar("No changes detected", Colors.orange, Icons.warning);
       return;
     }
-
     setState(() => _isLoading = true);
 
     try {
       int? thumbnailIndex;
       String? thumbnailUrl;
 
+      // Thumbnail from local upload
       if (_localThumbnail != null) {
         thumbnailIndex = _localImages.indexOf(_localThumbnail!);
       }
-
+      // Thumbnail change from existing image
       if (_networkThumbnail != null &&
           _networkThumbnail != _originalNetworkThumbnail) {
         thumbnailUrl = _networkThumbnail;
       }
 
+      // Upload new images
       if (_localImages.isNotEmpty) {
-        await ApiService.addImages(
-          widget.vendorId,
-          widget.productId,
-          _localImages,
-          thumbnailIndex,
+        await ApiService.manageImages(
+          vendorId: widget.vendorId,
+          productId: widget.productId,
+          action: "upload",
+          images: _localImages,
+          thumbnailIndex: thumbnailIndex,
         );
       }
 
+      // Update existing thumbnail
       if (thumbnailUrl != null) {
-        await ApiService.setThumbnail(
-          widget.vendorId,
-          widget.productId,
-          thumbnailUrl,
+        await ApiService.manageImages(
+          vendorId: widget.vendorId,
+          productId: widget.productId,
+          action: "setThumbnail",
+          signedUrl: thumbnailUrl,
         );
       }
 
-      if (mounted) Navigator.pop(context, "uploaded");
+      // ✅ Return updated thumbnail (or just "uploaded")
+      if (mounted) {
+        Navigator.pop(context, thumbnailUrl ?? "uploaded");
+      }
     } catch (e) {
       _showTopFlashbar("Save failed: $e", Colors.red, Icons.error);
       if (mounted) setState(() => _isLoading = false);
@@ -121,15 +127,15 @@ class _UploadScreenState extends State<UploadScreen> {
     }
 
     setState(() => _isLoading = true);
-    final imageUrl = _networkImages[index]; // signed URL
+    final imageUrl = _networkImages[index];
 
     try {
-      final updatedImages = await ApiService.deleteImage(
-        widget.vendorId,
-        widget.productId,
-        imageUrl, // ✅ pass full signed URL
+      final updatedImages = await ApiService.manageImages(
+        vendorId: widget.vendorId,
+        productId: widget.productId,
+        action: "delete",
+        signedUrl: imageUrl,
       );
-
       if (mounted) {
         setState(() {
           _networkImages = updatedImages;
@@ -302,23 +308,22 @@ class _UploadScreenState extends State<UploadScreen> {
       flushbarPosition: FlushbarPosition.TOP,
       margin: const EdgeInsets.all(8),
       borderRadius: BorderRadius.circular(8),
-      boxShadows: [
-        const BoxShadow(
-          color: Colors.black26,
-          offset: Offset(0, 2),
-          blurRadius: 4,
-        ),
+      boxShadows: const [
+        BoxShadow(color: Colors.black26, offset: Offset(0, 2), blurRadius: 4),
       ],
     ).show(context);
   }
 }
+
+// ------------------------------------------------------
+// UI Helper Widgets
+// ------------------------------------------------------
 
 class _UploadedImageCard extends StatelessWidget {
   final String imageUrl;
   final bool isThumbnail;
   final VoidCallback onDelete;
   final VoidCallback onTap;
-
   const _UploadedImageCard({
     Key? key,
     required this.imageUrl,
@@ -331,17 +336,20 @@ class _UploadedImageCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: isThumbnail
-                  ? Border.all(color: const Color(0xFF02D7C0), width: 3)
-                  : null,
-            ),
-            child: ClipRRect(
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: isThumbnail
+              ? Border.all(
+                  width: 3,
+                  color: const Color(0xFF02D7C0), // ✅ teal border
+                )
+              : null,
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: CachedNetworkImage(
                 imageUrl: imageUrl,
@@ -350,20 +358,20 @@ class _UploadedImageCard extends StatelessWidget {
                     Center(child: Icon(Icons.image, color: Colors.grey[300])),
               ),
             ),
-          ),
-          Positioned(
-            top: 4,
-            right: 4,
-            child: GestureDetector(
-              onTap: onDelete,
-              child: const CircleAvatar(
-                radius: 12,
-                backgroundColor: Colors.black54,
-                child: Icon(Icons.delete, color: Colors.white, size: 14),
+            Positioned(
+              top: 4,
+              right: 4,
+              child: GestureDetector(
+                onTap: onDelete,
+                child: const CircleAvatar(
+                  radius: 12,
+                  backgroundColor: Colors.black54,
+                  child: Icon(Icons.delete, color: Colors.white, size: 14),
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -374,7 +382,6 @@ class _LocalImageCard extends StatelessWidget {
   final bool isThumbnail;
   final VoidCallback onTap;
   final VoidCallback onDelete;
-
   const _LocalImageCard({
     Key? key,
     required this.imageFile,
@@ -387,34 +394,37 @@ class _LocalImageCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: isThumbnail
-                  ? Border.all(color: const Color(0xFF02D7C0), width: 3)
-                  : null,
-            ),
-            child: ClipRRect(
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: isThumbnail
+              ? Border.all(
+                  width: 3,
+                  color: const Color(0xFF02D7C0), // ✅ teal border
+                )
+              : null,
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: Image.file(imageFile, fit: BoxFit.cover),
             ),
-          ),
-          Positioned(
-            top: 4,
-            right: 4,
-            child: GestureDetector(
-              onTap: onDelete,
-              child: const CircleAvatar(
-                radius: 12,
-                backgroundColor: Colors.black54,
-                child: Icon(Icons.close, color: Colors.white, size: 14),
+            Positioned(
+              top: 4,
+              right: 4,
+              child: GestureDetector(
+                onTap: onDelete,
+                child: const CircleAvatar(
+                  radius: 12,
+                  backgroundColor: Colors.black54,
+                  child: Icon(Icons.close, color: Colors.white, size: 14),
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -437,13 +447,18 @@ class _UploadBox extends StatelessWidget {
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Icon(Icons.cloud_upload, size: 40, color: Color(0xFF009EAE)),
-            SizedBox(height: 8),
-            Text(
-              "Click to upload product images",
-              style: TextStyle(fontWeight: FontWeight.w500),
+          children: [
+            ShaderMask(
+              blendMode: BlendMode.srcIn,
+              shaderCallback: (bounds) => const LinearGradient(
+                colors: [Color(0xFF02D7C0), Color(0xFF009EAE)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ).createShader(Rect.fromLTWH(0, 0, bounds.width, bounds.height)),
+              child: const Icon(Icons.cloud_upload, size: 40),
             ),
+            const SizedBox(height: 8),
+            const Text("Click to upload product images"),
           ],
         ),
       ),
@@ -455,7 +470,6 @@ class _SaveImagesButton extends StatelessWidget {
   final bool isLoading;
   final bool hasChanges;
   final VoidCallback onPressed;
-
   const _SaveImagesButton({
     Key? key,
     required this.isLoading,
@@ -517,7 +531,6 @@ class _SaveImagesButton extends StatelessWidget {
 class _UploadOptions extends StatelessWidget {
   final VoidCallback onGalleryPick;
   final VoidCallback onCameraPick;
-
   const _UploadOptions({
     Key? key,
     required this.onGalleryPick,
@@ -532,12 +545,18 @@ class _UploadOptions extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           ListTile(
-            leading: const Icon(Icons.photo, color: Color(0xFF009EAE)),
+            leading: const Icon(
+              Icons.photo,
+              color: Color(0xFF02D7C0),
+            ), // ✅ Teal
             title: const Text("Choose from Gallery"),
             onTap: onGalleryPick,
           ),
           ListTile(
-            leading: const Icon(Icons.camera_alt, color: Color(0xFF009EAE)),
+            leading: const Icon(
+              Icons.camera_alt,
+              color: Color(0xFF02D7C0),
+            ), // ✅ Teal
             title: const Text("Take Photo"),
             onTap: onCameraPick,
           ),

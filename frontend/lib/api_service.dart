@@ -53,34 +53,43 @@ class ApiService {
     }
   }
 
-  /// Upload new images
-  static Future<Map<String, dynamic>> addImages(
-    String vendorId,
-    String productId,
-    List<File> images,
+  /// ✅ Manage Images (Upload, Delete, SetThumbnail)
+  static Future<List<String>> manageImages({
+    required String vendorId,
+    required String productId,
+    required String action, // "upload", "delete", "setThumbnail"
+    List<File>? images,
     int? thumbnailIndex,
-  ) async {
-    final uri = Uri.parse("$baseUrl/products/$vendorId/$productId/add-images");
-    print("➡️ Uploading ${images.length} images for product: $productId");
+    String? signedUrl,
+  }) async {
+    final uri = Uri.parse(
+      "$baseUrl/products/$vendorId/$productId/manage-images",
+    );
 
-    var request = http.MultipartRequest("POST", uri);
+    // ---------------- Upload ----------------
+    if (action == "upload") {
+      if (images == null || images.isEmpty) {
+        throw Exception("No images provided for upload.");
+      }
 
-    if (thumbnailIndex != null) {
-      request.fields['thumbnail_index'] = thumbnailIndex.toString();
-    }
+      print("➡️ Uploading ${images.length} images for product: $productId");
 
-    for (var imageFile in images) {
-      request.files.add(
-        await http.MultipartFile.fromPath("files", imageFile.path),
-      );
-    }
+      var request = http.MultipartRequest("POST", uri);
+      request.fields['action'] = "upload";
+      if (thumbnailIndex != null) {
+        request.fields['thumbnail_index'] = thumbnailIndex.toString();
+      }
 
-    var response = await request.send();
+      for (var imageFile in images) {
+        request.files.add(
+          await http.MultipartFile.fromPath("files", imageFile.path),
+        );
+      }
 
-    if (response.statusCode == 200) {
+      var response = await request.send();
       final responseData = jsonDecode(await response.stream.bytesToString());
 
-      if (responseData.containsKey('images')) {
+      if (response.statusCode == 200) {
         final returnedUrls = List<String>.from(responseData['images']);
         print(
           "✅ Upload successful. Received ${returnedUrls.length} image URLs for $productId:",
@@ -88,68 +97,46 @@ class ApiService {
         for (var i = 0; i < returnedUrls.length; i++) {
           print("  Image $i: ${returnedUrls[i]}");
         }
+        return returnedUrls;
+      } else {
+        throw Exception(
+          "Failed to upload images (status: ${response.statusCode})",
+        );
       }
-
-      return responseData;
-    } else {
-      throw Exception("Failed to add images (status: ${response.statusCode})");
     }
-  }
+    // ---------------- Delete / SetThumbnail ----------------
+    else if (action == "delete" || action == "setThumbnail") {
+      if (signedUrl == null)
+        throw Exception("signedUrl is required for $action");
+      final key = extractS3Key(signedUrl);
 
-  /// Delete a specific image
-  static Future<List<String>> deleteImage(
-    String vendorId,
-    String productId,
-    String signedUrl,
-  ) async {
-    final key = extractS3Key(signedUrl);
-    final uri = Uri.parse("$baseUrl/products/$vendorId/$productId/$key");
-
-    print("➡️ Deleting image for product: $productId");
-    print("   S3 Key: $key");
-
-    final response = await http.delete(uri);
-
-    if (response.statusCode == 200) {
-      final images = List<String>.from(jsonDecode(response.body)['images']);
       print(
-        "✅ Delete successful. ${images.length} images remain for $productId:",
+        "➡️ ${action == "delete" ? "Deleting" : "Setting thumbnail"} for product: $productId",
       );
-      for (var i = 0; i < images.length; i++) {
-        print("  Image $i: ${images[i]}");
+      print("   S3 Key: $key");
+
+      final response = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({"action": action, "imageKey": key}),
+      );
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        final updatedUrls = List<String>.from(responseData['images']);
+        if (action == "delete") {
+          print(
+            "✅ Delete successful. ${updatedUrls.length} images remain for $productId",
+          );
+        } else {
+          print("✅ Thumbnail updated successfully for $productId");
+        }
+        return updatedUrls;
+      } else {
+        throw Exception("Failed to $action (status: ${response.statusCode})");
       }
-      return images;
-    } else {
-      throw Exception(
-        "Failed to delete image (status: ${response.statusCode})",
-      );
     }
-  }
 
-  /// Set a specific image as thumbnail
-  static Future<void> setThumbnail(
-    String vendorId,
-    String productId,
-    String signedUrl,
-  ) async {
-    final key = extractS3Key(signedUrl);
-    final uri = Uri.parse("$baseUrl/products/$vendorId/$productId/thumbnail");
-
-    print("➡️ Setting thumbnail for product: $productId");
-    print("   S3 Key: $key");
-
-    final response = await http.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'imageKey': key}),
-    );
-
-    if (response.statusCode == 200) {
-      print("✅ Thumbnail updated successfully for product: $productId");
-    } else {
-      throw Exception(
-        "Failed to set thumbnail (status: ${response.statusCode})",
-      );
-    }
+    throw Exception("Invalid action: $action");
   }
 }
