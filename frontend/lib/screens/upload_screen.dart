@@ -9,12 +9,14 @@ class UploadScreen extends StatefulWidget {
   final String vendorId;
   final String productId;
   final String productName;
+
   const UploadScreen({
     Key? key,
     required this.vendorId,
     required this.productId,
     required this.productName,
   }) : super(key: key);
+
   @override
   _UploadScreenState createState() => _UploadScreenState();
 }
@@ -26,9 +28,8 @@ class _UploadScreenState extends State<UploadScreen> {
 
   File? _localThumbnail;
   String? _networkThumbnail;
-  String? _originalNetworkThumbnail; // 👈 Track the original thumb
+  String? _originalNetworkThumbnail;
 
-  // ✅ Button enables if new images OR thumbnail changed
   bool get _hasChanges =>
       _localImages.isNotEmpty ||
       _localThumbnail != null ||
@@ -50,8 +51,8 @@ class _UploadScreenState extends State<UploadScreen> {
         setState(() {
           _networkImages = urls;
           if (urls.isNotEmpty) {
-            _networkThumbnail = urls.first; // assume 1st as default
-            _originalNetworkThumbnail = urls.first; // save original
+            _networkThumbnail = urls.first;
+            _originalNetworkThumbnail = urls.first;
           }
         });
       }
@@ -74,23 +75,17 @@ class _UploadScreenState extends State<UploadScreen> {
 
     try {
       int? thumbnailIndex;
-      String? thumbnailKey;
+      String? thumbnailUrl;
 
-      // Local thumbnail
       if (_localThumbnail != null) {
         thumbnailIndex = _localImages.indexOf(_localThumbnail!);
       }
 
-      // Network thumbnail
       if (_networkThumbnail != null &&
           _networkThumbnail != _originalNetworkThumbnail) {
-        final key = Uri.decodeFull(
-          _networkThumbnail!.split('/').last.split('?').first,
-        );
-        thumbnailKey = key;
+        thumbnailUrl = _networkThumbnail;
       }
 
-      // Upload new images
       if (_localImages.isNotEmpty) {
         await ApiService.addImages(
           widget.vendorId,
@@ -100,16 +95,15 @@ class _UploadScreenState extends State<UploadScreen> {
         );
       }
 
-      // Update existing thumbnail
-      if (thumbnailKey != null) {
+      if (thumbnailUrl != null) {
         await ApiService.setThumbnail(
           widget.vendorId,
           widget.productId,
-          thumbnailKey,
+          thumbnailUrl,
         );
       }
 
-      if (mounted) Navigator.pop(context, "uploaded"); // ✅ Go back to Home
+      if (mounted) Navigator.pop(context, "uploaded");
     } catch (e) {
       _showTopFlashbar("Save failed: $e", Colors.red, Icons.error);
       if (mounted) setState(() => _isLoading = false);
@@ -125,15 +119,17 @@ class _UploadScreenState extends State<UploadScreen> {
       );
       return;
     }
+
     setState(() => _isLoading = true);
-    final imageUrl = _networkImages[index];
-    final imageKey = Uri.decodeFull(imageUrl.split('/').last.split('?').first);
+    final imageUrl = _networkImages[index]; // signed URL
+
     try {
       final updatedImages = await ApiService.deleteImage(
         widget.vendorId,
         widget.productId,
-        imageKey,
+        imageUrl, // ✅ pass full signed URL
       );
+
       if (mounted) {
         setState(() {
           _networkImages = updatedImages;
@@ -163,14 +159,14 @@ class _UploadScreenState extends State<UploadScreen> {
   void _setAsLocalThumbnail(File imageFile) {
     setState(() {
       _localThumbnail = imageFile;
-      _networkThumbnail = null; // disable network thumbnail
+      _networkThumbnail = null;
     });
   }
 
   void _setAsNetworkThumbnail(String url) {
     setState(() {
       _networkThumbnail = url;
-      _localThumbnail = null; // disable local thumbnail
+      _localThumbnail = null;
     });
   }
 
@@ -179,6 +175,7 @@ class _UploadScreenState extends State<UploadScreen> {
     String displayedTitle = widget.productName.length > 20
         ? '${widget.productName.substring(0, 20)}...'
         : widget.productName;
+
     return WillPopScope(
       onWillPop: () async {
         Navigator.pop(context, true);
@@ -189,11 +186,11 @@ class _UploadScreenState extends State<UploadScreen> {
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,
-          iconTheme: IconThemeData(color: Colors.black),
+          iconTheme: const IconThemeData(color: Colors.black),
           titleSpacing: 0.0,
           title: Text(
             displayedTitle,
-            style: TextStyle(
+            style: const TextStyle(
               color: Colors.black,
               fontWeight: FontWeight.bold,
               fontSize: 18,
@@ -206,7 +203,7 @@ class _UploadScreenState extends State<UploadScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _UploadBox(onTap: () => _showUploadOptions(context)),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               if (_networkImages.isNotEmpty || _localImages.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8.0),
@@ -231,8 +228,9 @@ class _UploadScreenState extends State<UploadScreen> {
   Widget _buildImageGrid() {
     final totalCount = _networkImages.length + _localImages.length;
     if (totalCount == 0) return Container();
+
     return GridView.builder(
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
         crossAxisSpacing: 8,
         mainAxisSpacing: 8,
@@ -266,7 +264,7 @@ class _UploadScreenState extends State<UploadScreen> {
   void _showUploadOptions(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      shape: RoundedRectangleBorder(
+      shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) => _UploadOptions(
@@ -296,16 +294,20 @@ class _UploadScreenState extends State<UploadScreen> {
     Flushbar(
       messageText: Text(
         message,
-        style: TextStyle(color: Colors.white, fontSize: 16),
+        style: const TextStyle(color: Colors.white, fontSize: 16),
       ),
       icon: Icon(icon, color: Colors.white),
       backgroundColor: bgColor,
-      duration: Duration(seconds: 3),
+      duration: const Duration(seconds: 3),
       flushbarPosition: FlushbarPosition.TOP,
-      margin: EdgeInsets.all(8),
+      margin: const EdgeInsets.all(8),
       borderRadius: BorderRadius.circular(8),
       boxShadows: [
-        BoxShadow(color: Colors.black26, offset: Offset(0, 2), blurRadius: 4),
+        const BoxShadow(
+          color: Colors.black26,
+          offset: Offset(0, 2),
+          blurRadius: 4,
+        ),
       ],
     ).show(context);
   }
@@ -316,6 +318,7 @@ class _UploadedImageCard extends StatelessWidget {
   final bool isThumbnail;
   final VoidCallback onDelete;
   final VoidCallback onTap;
+
   const _UploadedImageCard({
     Key? key,
     required this.imageUrl,
@@ -371,6 +374,7 @@ class _LocalImageCard extends StatelessWidget {
   final bool isThumbnail;
   final VoidCallback onTap;
   final VoidCallback onDelete;
+
   const _LocalImageCard({
     Key? key,
     required this.imageFile,
@@ -403,7 +407,7 @@ class _LocalImageCard extends StatelessWidget {
             right: 4,
             child: GestureDetector(
               onTap: onDelete,
-              child: CircleAvatar(
+              child: const CircleAvatar(
                 radius: 12,
                 backgroundColor: Colors.black54,
                 child: Icon(Icons.close, color: Colors.white, size: 14),
@@ -433,16 +437,8 @@ class _UploadBox extends StatelessWidget {
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            ShaderMask(
-              blendMode: BlendMode.srcIn,
-              shaderCallback: (bounds) => LinearGradient(
-                colors: [const Color(0xFF02D7C0), const Color(0xFF009EAE)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ).createShader(Rect.fromLTWH(0, 0, bounds.width, bounds.height)),
-              child: Icon(Icons.cloud_upload, color: Colors.white, size: 40),
-            ),
+          children: const [
+            Icon(Icons.cloud_upload, size: 40, color: Color(0xFF009EAE)),
             SizedBox(height: 8),
             Text(
               "Click to upload product images",
@@ -459,6 +455,7 @@ class _SaveImagesButton extends StatelessWidget {
   final bool isLoading;
   final bool hasChanges;
   final VoidCallback onPressed;
+
   const _SaveImagesButton({
     Key? key,
     required this.isLoading,
@@ -470,20 +467,15 @@ class _SaveImagesButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      margin: EdgeInsets.only(top: 12, bottom: 20),
+      margin: const EdgeInsets.only(top: 12, bottom: 20),
       child: ElevatedButton(
         onPressed: isLoading || !hasChanges ? null : onPressed,
-        style:
-            ElevatedButton.styleFrom(
-              padding: EdgeInsets.zero,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              disabledBackgroundColor: Colors.transparent,
-            ).copyWith(
-              backgroundColor: MaterialStateProperty.all(Colors.transparent),
-              shadowColor: MaterialStateProperty.all(Colors.transparent),
-            ),
+        style: ElevatedButton.styleFrom(
+          padding: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
         child: Ink(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -497,9 +489,9 @@ class _SaveImagesButton extends StatelessWidget {
           ),
           child: Container(
             alignment: Alignment.center,
-            padding: EdgeInsets.symmetric(vertical: 14),
+            padding: const EdgeInsets.symmetric(vertical: 14),
             child: isLoading
-                ? SizedBox(
+                ? const SizedBox(
                     width: 24,
                     height: 24,
                     child: CircularProgressIndicator(
@@ -507,7 +499,7 @@ class _SaveImagesButton extends StatelessWidget {
                       strokeWidth: 2.5,
                     ),
                   )
-                : Text(
+                : const Text(
                     "Save Images",
                     style: TextStyle(
                       color: Colors.white,
@@ -525,6 +517,7 @@ class _SaveImagesButton extends StatelessWidget {
 class _UploadOptions extends StatelessWidget {
   final VoidCallback onGalleryPick;
   final VoidCallback onCameraPick;
+
   const _UploadOptions({
     Key? key,
     required this.onGalleryPick,
@@ -539,25 +532,13 @@ class _UploadOptions extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           ListTile(
-            leading: ShaderMask(
-              blendMode: BlendMode.srcIn,
-              shaderCallback: (bounds) => LinearGradient(
-                colors: [const Color(0xFF02D7C0), const Color(0xFF009EAE)],
-              ).createShader(Rect.fromLTWH(0, 0, bounds.width, bounds.height)),
-              child: Icon(Icons.photo, color: Colors.white),
-            ),
-            title: Text("Choose from Gallery"),
+            leading: const Icon(Icons.photo, color: Color(0xFF009EAE)),
+            title: const Text("Choose from Gallery"),
             onTap: onGalleryPick,
           ),
           ListTile(
-            leading: ShaderMask(
-              blendMode: BlendMode.srcIn,
-              shaderCallback: (bounds) => LinearGradient(
-                colors: [const Color(0xFF02D7C0), const Color(0xFF009EAE)],
-              ).createShader(Rect.fromLTWH(0, 0, bounds.width, bounds.height)),
-              child: Icon(Icons.camera_alt, color: Colors.white),
-            ),
-            title: Text("Take Photo"),
+            leading: const Icon(Icons.camera_alt, color: Color(0xFF009EAE)),
+            title: const Text("Take Photo"),
             onTap: onCameraPick,
           ),
         ],

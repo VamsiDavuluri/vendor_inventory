@@ -8,12 +8,15 @@ import 'upload_screen.dart';
 class Product {
   final String id;
   final String name;
+  final String brand; // ✅ brand support
   bool hasImages;
   String? coverImageUrl;
   final int imageCount;
+
   Product({
     required this.id,
     required this.name,
+    required this.brand, // ✅ required
     this.hasImages = false,
     this.coverImageUrl,
     this.imageCount = 0,
@@ -36,7 +39,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   List<Product> _allProducts = [];
   List<Product> _filteredProducts = [];
-
   String _searchQuery = "";
   final FocusNode _searchFocus = FocusNode();
 
@@ -254,14 +256,24 @@ class _ProductCard extends StatelessWidget {
               ),
               Padding(
                 padding: const EdgeInsets.all(12.0),
-                child: Text(
-                  product.name,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      product.name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      product.brand, // ✅ show brand
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                  ],
                 ),
               ),
             ],
