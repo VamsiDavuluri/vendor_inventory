@@ -231,20 +231,3 @@ app.get('/vendor/:vendorId/qrcode', async (req, res) => {
 app.listen(port, '0.0.0.0', () => {
   console.log(`🚀 Backend running on http://localhost:${port}`);
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

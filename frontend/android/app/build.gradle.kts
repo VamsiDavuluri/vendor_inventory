@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.vendor_inventory"
+    namespace = "com.getto.sync"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -20,7 +20,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.vendor_inventory"
+        applicationId = "com.getto.sync"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

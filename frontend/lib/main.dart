@@ -11,7 +11,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Vendor Inventory',
+      title: 'Getto Sync',
       theme: ThemeData(
         primaryColor: Color(0xFF009EAE),
         scaffoldBackgroundColor: Colors.white,

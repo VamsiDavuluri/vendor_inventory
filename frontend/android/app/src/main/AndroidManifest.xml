@@ -1,8 +1,10 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.getto.sync">
+
   <uses-permission android:name="android.permission.INTERNET" />
 
     <application
-        android:label="vendor_inventory"
+        android:label="Getto Sync"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true"
