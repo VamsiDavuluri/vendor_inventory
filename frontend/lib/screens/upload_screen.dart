@@ -20,7 +20,6 @@ class UploadScreen extends StatefulWidget {
 }
 
 class _UploadScreenState extends State<UploadScreen> {
-  // --- YOUR LOGIC (UNCHANGED) ---
   List<File> _localImages = [];
   List<String> _networkImages = [];
   bool _isLoading = false;
@@ -171,7 +170,6 @@ class _UploadScreenState extends State<UploadScreen> {
       _localThumbnail = null;
     });
   }
-  // --- END OF YOUR LOGIC (UNCHANGED) ---
 
   @override
   Widget build(BuildContext context) {
@@ -311,10 +309,6 @@ class _UploadScreenState extends State<UploadScreen> {
     ).show(context);
   }
 }
-
-// =======================================================
-// UI Helper Widgets
-// =======================================================
 
 class _UploadedImageCard extends StatelessWidget {
   final String imageUrl;

@@ -147,9 +147,7 @@ app.post(
   }
 );
 
-// ================================================================
 //                FETCH PRODUCTS (unchanged)
-// ================================================================
 app.get('/vendor/:vendorId/products-with-status', async (req, res) => {
   const { vendorId } = req.params;
   const products = VENDOR_PRODUCTS[vendorId];
@@ -187,10 +185,6 @@ app.get('/vendor/:vendorId/products-with-status', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch product statuses' });
   }
 });
-
-// ================================================================
-//                FETCH IMAGES (unchanged)
-// ================================================================
 app.get('/products/:vendorId/:productId', async (req, res) => {
   const { vendorId, productId } = req.params;
   try {
@@ -210,10 +204,6 @@ app.get('/products/:vendorId/:productId', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch images' });
   }
 });
-
-// ================================================================
-//                QR Code
-// ================================================================
 app.get('/vendor/:vendorId/qrcode', async (req, res) => {
   const { vendorId } = req.params;
   if (!vendorId) return res.status(400).send('Vendor ID is required');
@@ -225,9 +215,6 @@ app.get('/vendor/:vendorId/qrcode', async (req, res) => {
   }
 });
 
-// ================================================================
-//                SERVER START
-// ================================================================
 app.listen(port, '0.0.0.0', () => {
   console.log(`🚀 Backend running on http://localhost:${port}`);
 });

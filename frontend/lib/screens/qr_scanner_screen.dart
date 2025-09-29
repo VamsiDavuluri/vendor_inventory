@@ -201,8 +201,6 @@ class _LoadingScreenState extends State<_LoadingScreen> {
       final List<Product> loadedProducts =
           await ApiService.fetchProductsWithStatus(widget.vendorId);
 
-      // The print loop has been removed from here to keep the terminal clean.
-
       if (mounted) {
         Navigator.pushAndRemoveUntil(
           context,
