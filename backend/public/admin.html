@@ -1,4 +1,3 @@
-<!-- admin.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -33,8 +32,9 @@
                 return;
             }
             
-            // 🔥 IMPORTANT: Replace with your computer's actual IP address.
-            const apiUrl = `http://192.168.0.121:3000/vendor/${vendorId}/qrcode`;
+            // 🔥 IMPORTANT: This URL now includes the "/api" prefix.
+            // Remember to replace the IP address with your computer's actual IP.
+            const apiUrl = `http://192.168.0.121:3000/api/vendor/${vendorId}/qrcode`;
 
             try {
                 const response = await fetch(apiUrl);

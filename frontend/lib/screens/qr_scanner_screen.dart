@@ -55,6 +55,7 @@ class QRScannerScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ... UI code is the same, no changes needed here ...
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -136,6 +137,8 @@ class _ScannerPage extends StatefulWidget {
 
 class _ScannerPageState extends State<_ScannerPage> {
   final MobileScannerController cameraController = MobileScannerController();
+  bool _isPopping = false;
+
   @override
   void dispose() {
     cameraController.dispose();
@@ -143,14 +146,22 @@ class _ScannerPageState extends State<_ScannerPage> {
   }
 
   void _onQRCodeDetected(BarcodeCapture capture) {
+    if (_isPopping) return; // Prevent multiple pops from a single scan
+
     final String? scannedValue = capture.barcodes.first.rawValue;
     if (scannedValue != null && scannedValue.isNotEmpty) {
-      Navigator.pop(context, scannedValue);
+      _isPopping = true;
+      // --- NEW: Log to confirm the scan was successful ---
+      print('✅ QR Code Detected: $scannedValue');
+      if (mounted) {
+        Navigator.pop(context, scannedValue);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // ... UI code is the same, no changes needed here ...
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -214,14 +225,15 @@ class _LoadingScreenState extends State<_LoadingScreen> {
         );
       }
     } catch (e) {
-      print("❌ Failed to load vendor data: $e");
+      // --- NEW: Print the specific error to the terminal ---
+      print("❌ Fetch failed with error: $e");
       if (mounted) {
         await showDialog(
           context: context,
           builder: (context) => AlertDialog(
             title: Text("Scan Error"),
             content: Text(
-              "Vendor not found or could not load data. Please scan a valid QR code.",
+              "Could not load data for this vendor. Please check your network connection and try again.",
             ),
             actions: [
               TextButton(
@@ -238,6 +250,7 @@ class _LoadingScreenState extends State<_LoadingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ... UI code is the same, no changes needed here ...
     return Scaffold(
       backgroundColor: Colors.white,
       body: Center(

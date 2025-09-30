@@ -27,8 +27,11 @@ class _UploadScreenState extends State<UploadScreen> {
   String? _networkThumbnail;
   String? _originalNetworkThumbnail;
 
+  final List<String> _signedUrlsToDelete = [];
+
   bool get _hasChanges =>
       _localImages.isNotEmpty ||
+      _signedUrlsToDelete.isNotEmpty ||
       (_networkThumbnail != null &&
           _networkThumbnail != _originalNetworkThumbnail);
 
@@ -74,82 +77,77 @@ class _UploadScreenState extends State<UploadScreen> {
 
     try {
       int? thumbnailIndex;
-      String? thumbnailUrl;
       if (_localThumbnail != null) {
         thumbnailIndex = _localImages.indexOf(_localThumbnail!);
       }
+
+      String? networkThumbnailUrl;
       if (_networkThumbnail != null &&
           _networkThumbnail != _originalNetworkThumbnail) {
-        thumbnailUrl = _networkThumbnail;
-      }
-      if (_localImages.isNotEmpty) {
-        await ApiService.manageImages(
-          vendorId: widget.vendorId,
-          productId: widget.productId,
-          action: "upload",
-          images: _localImages,
-          thumbnailIndex: thumbnailIndex,
-        );
-      }
-      if (thumbnailUrl != null) {
-        await ApiService.manageImages(
-          vendorId: widget.vendorId,
-          productId: widget.productId,
-          action: "setThumbnail",
-          signedUrl: thumbnailUrl,
-        );
+        networkThumbnailUrl = _networkThumbnail;
       }
 
-      // --- THIS IS THE FIX ---
-      // This line is now called for ALL successful save operations,
-      // including just changing the thumbnail.
-      if (mounted) {
-        Navigator.pop(context, "uploaded");
-      }
-      // --- END OF FIX ---
-    } catch (e) {
-      _showTopFlashbar("Save failed: $e", Colors.red, Icons.error);
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _deleteNetworkImage(int index) async {
-    if (_networkImages.length <= 1 && _localImages.isEmpty) {
-      _showTopFlashbar(
-        "At least 1 image must remain",
-        Colors.orange,
-        Icons.warning,
-      );
-      return;
-    }
-    setState(() => _isLoading = true);
-    final imageUrl = _networkImages[index];
-    try {
-      final updatedImages = await ApiService.manageImages(
+      final Map<String, dynamic> result = await ApiService.batchUpdateImages(
         vendorId: widget.vendorId,
         productId: widget.productId,
-        action: "delete",
-        signedUrl: imageUrl,
+        imagesToUpload: _localImages,
+        urlsToDelete: _signedUrlsToDelete,
+        newLocalThumbnailIndex: thumbnailIndex,
+        newNetworkThumbnailUrl: networkThumbnailUrl,
       );
+
+      final List<dynamic> imageUrls = result['images'] ?? [];
+      print(
+        "✅ Batch update successful. Received ${imageUrls.length} image URLs for ${widget.productId}:",
+      );
+      for (var i = 0; i < imageUrls.length; i++) {
+        print("  Image $i: ${imageUrls[i]}");
+      }
+
       if (mounted) {
-        setState(() {
-          _networkImages = updatedImages;
-          if (_networkThumbnail == imageUrl) {
-            _networkThumbnail = updatedImages.isNotEmpty
-                ? updatedImages.first
-                : null;
-            _originalNetworkThumbnail = _networkThumbnail;
-          }
-        });
+        Navigator.pop(context, result);
       }
     } catch (e) {
-      _showTopFlashbar("Failed to delete image: $e", Colors.red, Icons.error);
+      _showTopFlashbar("Save failed: $e", Colors.red, Icons.error);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  void _deleteNetworkImage(int index) {
+    if ((_localImages.length + _networkImages.length) <= 1) {
+      _showTopFlashbar(
+        "At least one image must remain.",
+        Colors.orange,
+        Icons.warning,
+      );
+      return;
+    }
+
+    setState(() {
+      final imageUrl = _networkImages[index];
+      _signedUrlsToDelete.add(imageUrl);
+      _networkImages.removeAt(index);
+
+      if (_networkThumbnail == imageUrl) {
+        _networkThumbnail = _networkImages.isNotEmpty
+            ? _networkImages.first
+            : null;
+        _originalNetworkThumbnail = _networkThumbnail;
+      }
+    });
+  }
+
   void _deleteLocalImage(int index) {
+    if ((_localImages.length + _networkImages.length) <= 1) {
+      _showTopFlashbar(
+        "At least one image must remain.",
+        Colors.orange,
+        Icons.warning,
+      );
+      return;
+    }
+
     final localImageFile = _localImages[index];
     setState(() {
       if (localImageFile == _localThumbnail) _localThumbnail = null;
@@ -179,7 +177,28 @@ class _UploadScreenState extends State<UploadScreen> {
 
     return WillPopScope(
       onWillPop: () async {
-        Navigator.pop(context, true);
+        if (_hasChanges) {
+          final shouldPop = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Discard Changes?'),
+              content: const Text(
+                'You have unsaved changes. Are you sure you want to leave?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Discard'),
+                ),
+              ],
+            ),
+          );
+          return shouldPop ?? false;
+        }
         return true;
       },
       child: Scaffold(

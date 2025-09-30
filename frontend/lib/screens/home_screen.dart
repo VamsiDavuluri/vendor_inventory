@@ -8,15 +8,15 @@ import 'upload_screen.dart';
 class Product {
   final String id;
   final String name;
-  final String brand; // ✅ brand support
+  final String brand;
   bool hasImages;
   String? coverImageUrl;
-  final int imageCount;
+  int imageCount;
 
   Product({
     required this.id,
     required this.name,
-    required this.brand, // ✅ required
+    required this.brand,
     this.hasImages = false,
     this.coverImageUrl,
     this.imageCount = 0,
@@ -62,12 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         setState(() {
           _allProducts = updatedProducts;
-          _filteredProducts = _allProducts
-              .where(
-                (p) =>
-                    p.name.toLowerCase().contains(_searchQuery.toLowerCase()),
-              )
-              .toList();
+          _filterProducts();
         });
       }
     } catch (e) {
@@ -87,8 +82,18 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
 
-    if (result == "uploaded") {
-      await _refreshProducts();
+    if (result is Map<String, dynamic> && mounted) {
+      setState(() {
+        final productIndex = _allProducts.indexWhere((p) => p.id == product.id);
+        if (productIndex != -1) {
+          _allProducts[productIndex].coverImageUrl = result['coverImageUrl'];
+          _allProducts[productIndex].imageCount = result['imageCount'];
+          _allProducts[productIndex].hasImages =
+              (result['imageCount'] ?? 0) > 0;
+        }
+        _filterProducts();
+      });
+
       _showTopFlashbar(
         "Images updated successfully",
         Colors.green,
@@ -100,6 +105,20 @@ class _HomeScreenState extends State<HomeScreen> {
       FocusScope.of(context).unfocus();
       _searchFocus.unfocus();
     }
+  }
+
+  void _filterProducts() {
+    setState(() {
+      if (_searchQuery.isEmpty) {
+        _filteredProducts = List.from(_allProducts);
+      } else {
+        _filteredProducts = _allProducts
+            .where(
+              (p) => p.name.toLowerCase().contains(_searchQuery.toLowerCase()),
+            )
+            .toList();
+      }
+    });
   }
 
   void _showTopFlashbar(String message, Color bgColor, IconData icon) {
@@ -157,16 +176,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 onChanged: (val) {
-                  setState(() {
-                    _searchQuery = val;
-                    _filteredProducts = _allProducts
-                        .where(
-                          (p) => p.name.toLowerCase().contains(
-                            _searchQuery.toLowerCase(),
-                          ),
-                        )
-                        .toList();
-                  });
+                  _searchQuery = val;
+                  _filterProducts();
                 },
               ),
             ),
@@ -270,7 +281,7 @@ class _ProductCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      product.brand, // ✅ show brand
+                      product.brand,
                       style: TextStyle(color: Colors.grey[600], fontSize: 12),
                     ),
                   ],
